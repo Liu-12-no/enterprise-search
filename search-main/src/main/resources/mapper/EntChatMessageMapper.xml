@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qych.mapper.EntChatMessageMapper">
+
+    <select id="selectDeletedMessages" resultType="com.qych.entity.pojos.EntChatMessage">
+        SELECT * FROM ent_chat_message WHERE is_deleted = 1 LIMIT 500
+    </select>
+
+    <select id="selectBySessionId" resultType="com.qych.entity.pojos.EntChatMessage">
+        SELECT * FROM ent_chat_message WHERE session_id = #{sessionId}
+    </select>
+
+    <delete id="physicalDeleteBySessionId">
+        DELETE FROM ent_chat_message WHERE session_id = #{sessionId}
+    </delete>
+
+    <delete id="physicalDeleteById">
+        DELETE FROM ent_chat_message WHERE id = #{id}
+    </delete>
+</mapper>

@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qych.mapper.EntBasicInfoMapper">
+
+
+    <resultMap id="ResultMap" type="com.qych.entity.vo.EntBasicInfoVO">
+        <id column="id" property="id"/>
+        <result column="institution_name" property="name"/>
+        <result column="institution_id" property="institutionId"/>
+        <result column="social_credit_code" property="creditCode"/>
+        <result column="registered_capital" property="regCapital"/>
+        <result column="establish_date" property="establishDate"/>
+        <result column="tel" property="tel"/>
+        <result column="email" property="email"/>
+        <result column="registered_address" property="address"/>
+        <result column="legal_person_name" property="legalPerson"/>
+        <result column="business_state" property="statusTag"/>
+        <result column="enterprise_nature" property="typeTag"/>
+    </resultMap>
+
+    <select id="searchEnterprise" resultMap="ResultMap">
+        SELECT
+        eb.id,
+        eb.institution_id,
+        eb.institution_name,
+        eb.business_state,
+        eb.enterprise_nature,
+        eb.social_credit_code,
+        eb.registered_capital,
+        eb.registered_currency,
+        eb.establish_date,
+        eb.tel,
+        eb.email,
+        eb.registered_address,
+        ee.executive_name AS legal_person_name
+        FROM
+        `ent_basic_info` eb
+        LEFT JOIN (
+        SELECT institution_id, executive_name
+        FROM ent_executive
+        WHERE position LIKE '%法人%'
+        ) ee ON eb.institution_id = ee.institution_id
+        <where>
+            <if test="kw != null and kw != ''">
+                AND (
+                eb.institution_name LIKE CONCAT('%', #{kw}, '%')
+                OR ee.executive_name LIKE CONCAT('%', #{kw}, '%')
+                OR eb.social_credit_code = #{kw}
+                )
+            </if>
+        </where>
+        ORDER BY eb.update_time DESC
+    </select>
+
+
+
+    <select id="advancedSearchEnterprise" resultMap="ResultMap">
+        SELECT
+        eb.id,
+        eb.institution_name,
+        eb.institution_id,
+        eb.business_state,
+        eb.enterprise_nature,
+        eb.social_credit_code,
+        eb.registered_capital,
+        eb.registered_currency,
+        eb.establish_date,
+        eb.tel,
+        eb.email,
+        eb.registered_address,
+        ee.executive_name AS legal_person_name
+        FROM
+        `ent_basic_info` eb
+        LEFT JOIN (
+        SELECT institution_id, executive_name
+        FROM ent_executive
+        WHERE position LIKE '%法人%'
+        ) ee ON eb.institution_id = ee.institution_id
+        <where>
+
+            <if test="dto.keyword != null and dto.keyword != ''">
+                AND (
+                eb.institution_name LIKE CONCAT('%', #{dto.keyword}, '%')
+                OR ee.executive_name LIKE CONCAT('%', #{dto.keyword}, '%')
+                OR eb.social_credit_code = #{dto.keyword}
+                )
+            </if>
+
+            <if test="dto.queryStateCodes != null and dto.queryStateCodes.size() > 0">
+                AND eb.business_state IN
+                <foreach collection="dto.queryStateCodes" item="code" open="(" separator="," close=")">
+                    #{code}
+                </foreach>
+            </if>
+
+            <if test="dto.capitalRanges != null and dto.capitalRanges.size() > 0">
+                AND (
+                <foreach collection="dto.capitalRanges" item="range" separator=" OR ">
+                    (eb.registered_capital &gt;= #{range.min} AND eb.registered_capital &lt;= #{range.max})
+                </foreach>
+                )
+            </if>
+
+            <if test="dto.yearRanges != null and dto.yearRanges.size() > 0">
+                AND (
+                <foreach collection="dto.yearRanges" item="range" separator=" OR ">
+                    <choose>
+                        <when test="range.min != null">
+                            (eb.establish_date &gt;= #{range.min} AND eb.establish_date &lt;= #{range.max})
+                        </when>
+                        <otherwise>
+                            (eb.establish_date &lt;= #{range.max})
+                        </otherwise>
+                    </choose>
+                </foreach>
+                )
+            </if>
+
+        </where>
+        ORDER BY eb.establish_date DESC
+    </select>
+
+
+    <select id="selectAllForEsSync" resultType="com.qych.entity.dtos.EntSyncDTO">
+        SELECT
+            eb.id,
+            eb.institution_id,
+            eb.institution_name,
+            eb.business_state,
+            eb.enterprise_nature,
+            eb.social_credit_code,
+            eb.registered_capital,
+            eb.establish_date,
+            eb.tel,
+            eb.email,
+            eb.registered_address,
+            ee.executive_name AS legalPersonName
+        FROM
+            `ent_basic_info` eb
+                LEFT JOIN (
+                SELECT
+                    institution_id,
+                    executive_name
+                FROM
+                    ent_executive
+                WHERE
+                    position LIKE '%法人%'
+            ) ee ON eb.institution_id = ee.institution_id
+    </select>
+</mapper>

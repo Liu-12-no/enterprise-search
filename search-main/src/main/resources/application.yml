@@ -1,0 +1,78 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:mysql://192.168.200.130:3306/company_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+
+  minio:
+    endpoint: http://192.168.200.130:9000
+    accessKey: minio
+    secretKey: minio123
+    bucketName: knowing-ai
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+  ai:
+    elasticsearch:
+      url: http://192.168.200.130:9201
+
+  elasticsearch:
+    uris: http://192.168.200.130:9200
+    connection-timeout: 5s
+    socket-timeout: 30s
+
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+
+  redis:
+    host: 192.168.200.130
+    port: 6379
+    password: leadnews
+    lettuce:
+      pool:
+        max-active: 10
+        max-idle: 5
+    timeout: 5000ms
+
+
+xxl:
+  job:
+    admin:
+      addresses: http://192.168.200.130:8888/xxl-job-admin
+    executor:
+      appname: qych-ai-executor
+      port: 9999
+      logpath: /data/applogs/xxl-job/jobhandler
+      logretentiondays: 30
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY}
+  base-url: ${DEEPSEEK_BASE_URL}
+
+logging:
+  level:
+    root: info
+    dev.langchain4j.model.openai: DEBUG
+    com.qych: debug
+
+qysearch:
+  jwt:
+    secret-key: QySearch@DeepSeek!2026-Secret-Key-Must-Be-Long
+    expiration-time: 604800000
