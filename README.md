@@ -309,7 +309,7 @@ npm run dev
 | `DEEPSEEK_API_KEY` | ✅ | — | DeepSeek API 密钥 |
 | `DEEPSEEK_BASE_URL` | ✅ | `https://api.deepseek.com` | DeepSeek API 地址 |
 | `JWT_SECRET_KEY` | ✅ | — | JWT 签名密钥 |
-| `MYSQL_HOST` | ❌ | `—` | MySQL 主机 |
+| `MYSQL_HOST` | ❌ |  — | MySQL 主机 |
 | `REDIS_PASSWORD` | ❌ | — | Redis 密码 |
 | `MINIO_SECRET_KEY` | ❌ | — | MinIO 密钥 |
 
