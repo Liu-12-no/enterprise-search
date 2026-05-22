@@ -11,6 +11,7 @@ import com.qych.entity.vo.EntBasicInfoVO;
 import com.qych.factory.EsSearchQueryFactory;
 import com.qych.mapper.EntBasicInfoMapper;
 import com.qych.service.EntSearchService;
+import com.qych.service.ICacheAsyncService;
 import com.qych.utils.EntStateDictUtil;
 import com.qych.utils.exception.BaseException;
 import dev.langchain4j.internal.Json;
@@ -43,6 +44,9 @@ public class EntSearchServiceImpl implements EntSearchService {
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private ICacheAsyncService cacheAsyncService;
     @Override
     public Page<EntBasicInfoVO> advancedSearch(EntAdvancedQueryDTO dto) {
 
@@ -135,13 +139,8 @@ public class EntSearchServiceImpl implements EntSearchService {
         page.setTotal(searchHits.getTotalHits());
 
 
-        try {
-            //将结果回填到redis
-            redisTemplate.opsForValue().set(cacheKey,JSON.toJSONString(page),1, TimeUnit.HOURS);
-            log.info("将数据回填redis成功");
-        } catch (Exception e) {
-            log.error("Redis 连接失败: {}", e.getMessage());
-        }
+        //将结果回填到redis
+        cacheAsyncService.saveSearchCache(cacheKey,page);
 
 
         //mysql中查询

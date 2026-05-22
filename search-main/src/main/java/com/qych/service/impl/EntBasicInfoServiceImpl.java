@@ -11,6 +11,7 @@ import com.qych.entity.pojos.*;
 import com.qych.entity.vo.*;
 import com.qych.factory.EsSearchQueryFactory;
 import com.qych.mapper.*;
+import com.qych.service.ICacheAsyncService;
 import com.qych.service.IEntBasicInfoService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.qych.utils.EntStateDictUtil;
@@ -64,6 +65,9 @@ public  class EntBasicInfoServiceImpl extends ServiceImpl<EntBasicInfoMapper, En
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private ICacheAsyncService cacheAsyncService;
 
     //热搜排行榜的Redis key
     private static final String HOT_SEARCH_KEY = "ent:search:hot_keywords";
@@ -170,14 +174,8 @@ public  class EntBasicInfoServiceImpl extends ServiceImpl<EntBasicInfoMapper, En
         //获取查询到的总数
         entityPage.setTotal(searchHits.getTotalHits());
 
-        try {
-            //将结果回填到redis
-            redisTemplate.opsForValue().set(cacheKey,JSON.toJSONString(entityPage),1, TimeUnit.HOURS);
-            log.info("将数据回填redis成功");
-        } catch (Exception e) {
-            log.error("Redis 连接失败: {}", e.getMessage());
-        }
-
+        //异步回填企业搜索结果缓存
+        cacheAsyncService.saveSearchCache(cacheKey,entityPage);
 
         log.info("总耗时:{}ms",System.currentTimeMillis()-start);
         return entityPage;
@@ -185,6 +183,24 @@ public  class EntBasicInfoServiceImpl extends ServiceImpl<EntBasicInfoMapper, En
 
     @Override
     public EntDetailVO getEnterpriseDetailById(Long id) {
+
+        //  记录方法开始时间
+        long start = System.currentTimeMillis();
+        //构造详情查询的专用key
+        String cacheKey = "ent:detail:id:" + id;
+
+        try {
+            String detailJson = redisTemplate.opsForValue().get(cacheKey);
+            if(StringUtils.isNotBlank(detailJson)){
+                log.info("⚡ 企业详情[缓存命中]成功, id: {}, 耗时: {} ms", id, System.currentTimeMillis() - start);
+                EntDetailVO entDetailVO = JSON.parseObject(detailJson, EntDetailVO.class);
+                return entDetailVO;
+            }
+        } catch (Exception e) {
+
+            log.error("读取企业详情缓存异常: {}", e.getMessage());
+        }
+
         //查询基本信息
         EntBasicInfo basicInfo = getById(id);
         if(basicInfo==null){
@@ -236,9 +252,14 @@ public  class EntBasicInfoServiceImpl extends ServiceImpl<EntBasicInfoMapper, En
         //填充企业资质信息列表
         vo.setQualificationList(eqvolist);
 
+        cacheAsyncService.saveDetailCache(cacheKey,vo);
+
+        log.info("🐢 企业详情[走数据库]查询完毕并触发异步回填, id: {}, 总耗时: {} ms", id, System.currentTimeMillis() - start);
+
         return vo;
     }
 
+    //查询主导产品及概览
     public EntBusinessOverview getEntBusinessOverview(String institutionName) {
         EntBusinessOverview entBusinessOverview = businessOverviewMapper.selectOne(
                 new LambdaQueryWrapper<EntBusinessOverview>().eq(EntBusinessOverview::getInstitutionName, institutionName)
