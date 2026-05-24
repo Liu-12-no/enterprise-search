@@ -3,6 +3,10 @@ package com.qych.service.impl;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.qych.component.CompanyCacheService;
 import com.qych.entity.dtos.ChatFileUploadDTO;
 import com.qych.service.KnowledgeBaseService;
@@ -24,6 +28,7 @@ import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import org.ahocorasick.trie.Emit;
 import org.ahocorasick.trie.Trie;
+
 import org.apache.http.HttpHost;
 import org.apache.poi.hwpf.HWPFDocument;
 import org.apache.poi.hwpf.extractor.WordExtractor;
@@ -32,8 +37,16 @@ import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.elasticsearch.client.RestClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.util.StreamUtils;
+import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.PostConstruct;
 import javax.servlet.http.HttpServletResponse;
@@ -75,6 +88,15 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private ElasticsearchClient aiElasticsearchClient;
 
+    @Value("${qych.python-parser.url}")
+    private String pythonApiUrl;
+
+    @Autowired
+    private RestTemplate restTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @PostConstruct
     public void initAiClient() {
         // 1. 设置通信地址
@@ -105,7 +127,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         Document document = null;
         if (".pdf".equals(suffix)){
             //解析pdf
-            document = FileSystemDocumentLoader.loadDocument(Paths.get(tempFilePath),new ApachePdfBoxDocumentParser());
+            document = parsePdfWithPythonService(tempFilePath);
         } else if (".docx".equals(suffix) || ".doc".equals(suffix)) {
             //解析word
             document = parseWordToDocument(tempFilePath);
@@ -401,4 +423,109 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             log.error("【清理】会话清理失败", e);
         }
     }
+
+    /**
+     *让python解析pdf
+     * @param tempFilePath
+     * @return
+     */
+    private Document parsePdfWithPythonService(String tempFilePath){
+
+        log.info("正在将 PDF 转发给 Python 微服务进行深度解析: {}", tempFilePath);
+
+        try {
+            StringBuilder finalContent = new StringBuilder();
+
+            // 1. 组装请求...
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", new FileSystemResource(tempFilePath));
+
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+
+            // 2. 发起请求
+            ResponseEntity<String> response = restTemplate.postForEntity(pythonApiUrl, requestEntity, String.class);
+
+            // ==========================================
+            // 【层级 1】：判断 HTTP 网络请求是否成功 (200 OK)
+            // ==========================================
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+
+                JsonNode rootNode = objectMapper.readTree(response.getBody());
+
+                // ==========================================
+                // 【层级 2】：判断 Python 业务是否成功 ("success")
+                // ==========================================
+                if ("success".equals(rootNode.has("status") ? rootNode.get("status").asText() : "")) {
+
+                    // 拿到 JSON 里的 content 数组
+                    JsonNode contentArray = rootNode.get("data").get("content");
+
+                    // ==========================================
+                    // 【层级 3】：如果有数据，开始遍历拼装
+                    // ==========================================
+                    if (contentArray != null && contentArray.isArray()) {
+                        for (JsonNode pageNode : contentArray) {
+
+                            // 提取当前页的普通纯文本
+                            String pageText = pageNode.has("text") ? pageNode.get("text").asText() : "";
+                            if (pageText != null && !pageText.trim().isEmpty()) {
+                                finalContent.append(pageText).append("\n\n");
+                            }
+
+                            // 提取并格式化当前页的表格数据
+                            JsonNode tablesArray = pageNode.get("tables");
+                            if (tablesArray != null && tablesArray.isArray() && tablesArray.size() > 0) {
+                                finalContent.append("--- 以下为表格数据 ---\n");
+
+                                for (JsonNode tableNode : tablesArray) {
+                                    for (JsonNode rowNode : tableNode) {
+                                        List<String> rowCells = new ArrayList<>();
+                                        for (JsonNode cellNode : rowNode) {
+                                            String cellText = cellNode.asText().replace("\n", " ").trim();
+                                            rowCells.add(cellText);
+                                        }
+                                        finalContent.append("| ").append(String.join(" | ", rowCells)).append(" |\n");
+                                    }
+                                    finalContent.append("\n");
+                                }
+                                finalContent.append("--- 表格数据结束 ---\n\n");
+                            }
+                        }
+                    }
+
+                } else {
+
+                    // Python 明确告诉你：我收到文件了，但是我解析失败了！
+                    String errorMsg = rootNode.has("message") ? rootNode.get("message").asText() : "未知业务错误";
+                    throw new RuntimeException("Python 微服务解析业务失败: " + errorMsg);
+                }
+
+                // --- 此时，HTTP 成功且业务成功，准备返回结果 ---
+                String resultText = finalContent.toString().trim();
+                if (resultText.isEmpty()) {
+                    log.warn("【警告】PDF 深度解析结果为空字符串！文件路径: {}", tempFilePath);
+                    return Document.from("文档解析完毕，但未提取到有效文本或表格数据。");
+                }
+
+                log.info("✅ PDF 深度解析成功，完美拼装文本与表格，总字符数: {}", resultText.length());
+                return Document.from(resultText);
+
+            } else {
+
+                // Python 服务器死机了，或者根本没启动报 404/500！
+                throw new RuntimeException("调用 Python 服务网络异常，HTTP 状态码: " + response.getStatusCodeValue());
+            }
+
+        } catch (Exception e) {
+            log.error("❌ 桥接 Python 解析 PDF 发生全局异常: ", e);
+            throw new RuntimeException("PDF 深度解析桥接失败", e);
+        }
+
+
+    }
+
+
 }

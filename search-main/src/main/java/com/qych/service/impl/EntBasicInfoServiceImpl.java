@@ -98,7 +98,7 @@ public  class EntBasicInfoServiceImpl extends ServiceImpl<EntBasicInfoMapper, En
             String json = redisTemplate.opsForValue().get(cacheKey);
             if(StringUtils.isNotBlank(json)){
 
-                log.info("redis缓存命中");
+                log.info("⚡ 关键字查询[缓存命中]成功,  耗时: {} ms",  System.currentTimeMillis() - start);
                 return JSON.parseObject(json,new TypeReference<Page<EntBasicInfoVO>>(){});
             }
         } catch (Exception e) {

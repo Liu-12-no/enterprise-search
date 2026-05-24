@@ -76,3 +76,9 @@ qysearch:
   jwt:
     secret-key: QySearch@DeepSeek!2026-Secret-Key-Must-Be-Long
     expiration-time: 604800000
+
+# 咱们自定义的企业查询业务配置
+qych:
+  python-parser:
+    # Python 文档解析微服务的真实调用地址
+    url: http://127.0.0.1:8000/api/parse/pdf

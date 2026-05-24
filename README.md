@@ -20,12 +20,12 @@
 - **自动化运维**：集成 XXL-Job 实现全链路定时垃圾回收，覆盖 MySQL / ES / MinIO 三大存储。
 
 ### 📊 项目规模
-- **总代码行数**：约 **10,909 行** (核心源码，排除第三方库与构建产物)
+- **总代码行数**：约 **8,410 行** (核心源码，排除第三方库与构建产物)
 - **后端 Java 类**：50+ 核心类 (Agent / Tool / Service / Controller / Mapper)
 - **前端页面**：6 个视图页面 (AI 对话 / 高级搜索 / 企业详情 / 列表 / 首页)
-- **数据库表**：8 张核心业务表 (企业信息 / 股东 / 高管 / 专利 / 资质 / 会话 / 消息)
+- **数据库表**：9 张核心业务表 (企业信息 / 股东 / 高管 / 专利 / 资质 / 会话 / 消息 / 用户)
 - **Elasticsearch 索引**：6 个业务索引 + 1 个向量索引
-- **中间件依赖**：8 个 (MySQL / ES×2 / Redis / MinIO / XXL-Job / DeepSeek / BGE)
+- **中间件依赖**：9 个 (MySQL / ES×2 / Redis / MinIO / XXL-Job / DeepSeek / BGE / Python 解析微服务)
 
 ---
 
@@ -100,6 +100,18 @@
 
 ---
 
+### 7. Python 文档解析微服务 (Python PDF Parser)
+
+针对复杂 PDF（扫描件、复杂表格等）的解析瓶颈，系统引入独立的 Python 微服务，充分发挥 Python 生态在文档处理领域的优势：
+
+- **混合解析引擎**：采用 **PyMuPDF（fitz）** 快速提取文本与图片位置 + **pdfplumber** 精确拆解复杂表格，先判断是否为纯扫描件，再分别走文本提取或 OCR 占位通道。
+- **FastAPI 异步架构**：基于 FastAPI + uvicorn 构建，以 `async/await` 非阻塞方式处理文件上传，不会因大文件卡死服务进程。
+- **Java ↔ Python 打通**：后端通过 `RestTemplate`（60s 超时）调用 Python 微服务 `POST /api/parse/pdf` 接口，返回结构化的 JSON（页码 / 文本 / 表格 / 类型标记）。
+- **兜底策略**：若 Python 微服务不可用，自动回退至 Java 侧的 Apache POI 解析，保证核心流程不中断。
+- **集成测试**：提供 `PythonTest.java` 和 `PythonPingTest.java` 验证微服务的连通性与解析质量。
+
+---
+
 ## 🛠️ 技术栈详情
 
 ### 后端 (Backend)
@@ -119,6 +131,7 @@
 | **安全认证** | JWT (jjwt 0.9.1) | 无状态 Token，登录拦截器 |
 | **API 文档** | Knife4j 2.0.9 | Swagger 增强，在线调试 |
 | **文档解析** | Apache POI 5.2.3 + Tess4j 5.8.0 | Word/图片文字提取 |
+| **Python 微服务** | FastAPI + PyMuPDF + pdfplumber | 独立部署，高精度 PDF 文本与表格提取 |
 | **工具库** | Lombok, Fastjson, AhoCorasick | 代码简化与高性能文本匹配 |
 
 ### 前端 (Frontend)
@@ -151,30 +164,65 @@ enterprise-search
 │   │   │   └── KnowledgeBaseTool.java      # ES 8.9 向量语义检索工具
 │   │   ├── config/                   # 配置类
 │   │   │   ├── AiConfig.java               # AI 模型/Agent/向量库 统一配置
+│   │   │   ├── AsyncConfig.java            # 自定义异步线程池 (10/20/200)
+│   │   │   ├── Knife4jConfig.java          # Swagger 接口文档配置
+│   │   │   ├── MybatisPlusConfig.java      # MyBatis Plus 分页拦截器
+│   │   │   ├── RestTemplateConfig.java     # RestTemplate (调用 Python 微服务)
+│   │   │   ├── WebConfig.java              # Web MVC + 登录拦截器注册
 │   │   │   ├── XxlJobConfig.java           # XXL-Job 执行器配置
 │   │   │   └── ...                         # ES/MyBatis/MinIO 等配置
 │   │   ├── job/                      # XXL-Job 定时任务
 │   │   │   └── ChatDataCleanupJob.java     # 全链路垃圾回收 (ES+MinIO+MySQL)
-│   │   ├── controller/               # REST 接口层
-│   │   │   ├── AiChatController.java       # SSE 流式 AI 对话
-│   │   │   ├── EnterpriseSearchController.java # 高级多维度搜索
-│   │   │   └── KnowledgeBaseController.java    # RAG 知识库管理 (上传/删除)
+│   │   ├── component/                # 业务组件
+│   │   │   └── CompanyCacheService.java    # 企业名称缓存 + Aho-Corasick 匹配
+│   │   ├── controller/               # REST 接口层 (8 个)
+│   │   ├── AiChatController.java       # SSE 流式 AI 对话
+│   │   ├── AiSummaryController.java    # SSE 企业摘要流式接口
+│   │   ├── ChatHistoryController.java  # 历史会话列表/详情
+│   │   ├── EntBasicInfoController.java # 企业搜索/详情/高级搜索
+│   │   ├── EntLoginController.java     # 用户登录/注册
+│   │   ├── HotSearchController.java    # Redis 热搜关键词
+│   │   ├── KnowledgeBaseController.java# RAG 知识库管理 (上传/删除/预览)
+│   │   └── UserController.java         # 用户信息更新
 │   │   ├── service/                  # 业务逻辑层
 │   │   │   ├── impl/AiChatServiceImpl.java # AI 对话流式处理核心
 │   │   │   ├── KnowledgeBaseService.java   # 文档向量化与检索
 │   │   │   └── ...                         # 企业搜索/用户管理等
+│   │   ├── interceptor/              # 请求拦截器
+│   │   │   └── LoginInterceptor.java       # JWT 登录拦截认证
 │   │   ├── repository/               # Elasticsearch 仓储接口
 │   │   ├── entity/                   # POJO / VO / ES 文档实体
-│   │   └── utils/                    # MinioUtil、SseManager 等工具
+│   │   └── utils/                    # MinioUtil、SseManager、JwtUtils 等工具
+│   │       ├── CodeGenerator.java           # MyBatis Plus 代码生成器
+│   │       ├── EntStateDictUtil.java        # 企业状态数据字典映射
+│   │       ├── JwtUtils.java                # JWT Token 生成与解析
+│   │       ├── MinioUtil.java               # MinIO 对象存储客户端
+│   │       ├── SseManager.java              # SSE 连接管理与日志推送
+│   │       └── UserContext.java             # ThreadLocal 用户上下文
 │   └── src/main/resources/
 │       ├── application.yml                 # 主配置 (双ES/Redis/MinIO/XXL-Job)
-│       └── mapper/                         # MyBatis XML 映射文件 (6 张核心表)
+│       └── mapper/                         # MyBatis XML 映射文件 (9 张核心表)
+│
+│   └── src/test/java/com/qych/             # 单元与集成测试
+│       ├── EsSyncTest.java                 # ES 数据同步测试
+│       ├── PythonPingTest.java             # Python 微服务连通性测试
+│       └── PythonTest.java                 # Python 微服务 PDF 解析集成测试
 │
 ├── search-utils                      # 后端通用工具模块
 │   └── src/main/java/com/qych/utils/
 │       ├── pojo/BaseResponse.java          # 统一响应体封装
-│       ├── exception/GlobalExceptionHandler.java # 全局异常拦截
-│       └── ...                             # 其他通用工具
+│       ├── exception/
+│       │   ├── BaseException.java          # 自定义业务异常基类
+│       │   └── GlobalExceptionHandler.java # 全局异常拦截
+│       └── utils/RetCode.java              # 统一返回状态码枚举
+│
+├── python-parser                      # Python 文档解析微服务
+│   ├── main.py                              # FastAPI 入口 (端口 8000)
+│   ├── routers/
+│   │   └── parser_api.py                    # POST /api/parse/pdf 接口
+│   ├── services/
+│   │   └── pdf_service.py                   # PyMuPDF + pdfplumber 混合解析引擎
+│   └── requirements.txt                     # fastapi / uvicorn / PyMuPDF / pdfplumber
 │
 ├── frontend                          # 前端 Vue 3 项目
 │   ├── src/
@@ -192,6 +240,7 @@ enterprise-search
 │   └── vite.config.js
 │
 ├── pom.xml                           # 父 POM (版本统一管理)
+├── .env.example                      # 环境变量配置模板
 └── README.md                         # 项目说明文档
 ```
 
@@ -216,7 +265,9 @@ DeepSeek 整合多源数据，通过 SSE 流式返回专业回复
 
 ### 流程二：RAG 知识库构建
 ```
-用户上传 PDF/Word → MinIO 存储原始文件 → Apache POI 解析文本
+用户上传 PDF/Word → MinIO 存储原始文件
+    → Python 微服务 (PyMuPDF+pdfplumber) 解析文本/表格
+    → Apache POI 兜底解析（Python 不可用时）
     → DocumentSplitter 智能切片 → BGE 模型生成 512 维向量
     → 存入 ES 8.9.0 (带 sessionId 权限标签) → AI 问答时可检索
 ```
@@ -266,6 +317,7 @@ XXL-Job 调度中心触发 cleanDeletedChatDataJob
 | Redis | 6+ | 6379 | 缓存与会话管理 |
 | MinIO | 最新稳定版 | 9000 | 文档对象存储 |
 | XXL-Job Admin | 2.3.1 | 8888 | 分布式任务调度中心 |
+| Python 解析微服务 | Python 3.10+ | 8000 | 高精度 PDF 文档解析 |
 
 ### 2. 配置环境变量
 复制 `.env.example` 为 `.env`，填入你的配置：
@@ -288,14 +340,21 @@ cd search-main
 mvn spring-boot:run
 ```
 
-### 4. 前端启动
+### 4. Python 解析微服务启动
+```bash
+cd python-parser
+pip install -r requirements.txt
+python main.py
+```
+
+### 5. 前端启动
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-### 5. 访问地址
+### 6. 访问地址
 - **AI 对话页面**：`http://localhost:5173` (Vite 默认端口)
 - **API 文档 (Knife4j)**：`http://localhost:8080/doc.html`
 - **XXL-Job 调度中心**：`http://localhost:8888/xxl-job-admin`

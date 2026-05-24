@@ -39,7 +39,7 @@ public class ICacheAsyncServiceImpl implements ICacheAsyncService {
             String jsonString = JSON.toJSONString(entityPage);
             //将结果回填到redis
             redisTemplate.opsForValue().set(cacheKey,jsonString,1, TimeUnit.HOURS);
-            log.info("将数据回填redis成功");
+            log.info("异步回填关键字查询Redis成功, cacheKey: {}, 线程: {}", cacheKey, Thread.currentThread().getName());
         } catch (Exception e) {
             log.error("Redis 连接失败: {}", e.getMessage());
         }
