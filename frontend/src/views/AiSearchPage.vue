@@ -286,6 +286,57 @@
     </div>
 
     <el-dialog
+        v-model="showLoginDialog"
+        width="360px"
+        align-center
+        class="custom-profile-dialog"
+        :show-close="true"
+    >
+      <template #header>
+        <div class="dialog-custom-header">登录 知道 AI</div>
+      </template>
+
+      <div class="profile-form-container" style="margin-top: 10px;">
+        <div class="input-label">账号</div>
+        <el-input
+            v-model="loginForm.username"
+            placeholder="请输入账号"
+            class="modern-input"
+            clearable
+        >
+          <template #prefix>
+            <el-icon><User /></el-icon>
+          </template>
+        </el-input>
+
+        <div class="input-label" style="margin-top: 16px;">密码</div>
+        <el-input
+            v-model="loginForm.password"
+            type="password"
+            placeholder="请输入密码"
+            class="modern-input"
+            show-password
+            @keyup.enter="handleLogin"
+        >
+          <template #prefix>
+            <el-icon><Lock /></el-icon>
+          </template>
+        </el-input>
+      </div>
+
+      <template #footer>
+        <el-button
+            type="primary"
+            class="modern-submit-btn"
+            @click="handleLogin"
+            :loading="loginLoading"
+        >
+          登 录
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
         v-model="showProfileDialog"
         width="360px"
         align-center
