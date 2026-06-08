@@ -86,7 +86,7 @@ public class EsSearchQueryFactory {
             //创建一个内部bool查询容器
             BoolQueryBuilder capitalQueryBuilder = QueryBuilders.boolQuery();
             for (EntAdvancedQueryDTO.Range capitalRange : dto.getCapitalRanges()) {
-                if(capitalRange==null && (capitalRange.getMin() == null && capitalRange.getMax() == null)){
+                if(capitalRange==null || (capitalRange.getMin() == null && capitalRange.getMax() == null)){
                     continue;
                 }
                 RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery("regCapital");

@@ -25,7 +25,7 @@ public class PythonTest {
         //封装请求体
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
 
-        body.add("file", new FileSystemResource("E:\\利用大模型从各类报告中提取企业信息\\青岛征信服务有限公司\\项目申报\\6.21和22年税务汇算清缴材料.pdf"));
+        body.add("file", new FileSystemResource("E:\\示例公司"));
 
         //Post请求
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
